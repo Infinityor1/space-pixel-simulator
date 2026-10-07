@@ -195,3 +195,42 @@ body {
     margin-inline: auto;
     max-width: 80rem;
 }
+
+/* Global page reset */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #050508;
+}
+
+#app {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+#galaxy{
+  border:2px solid red;
+  width:80%;
+}
+/*
+ * PIXEL-ART CANVAS SCALING:
+ * These CSS properties disable bilinear filtering (blurring).
+ * When the small 320x180 buffer is stretched to fill a modern 1080p or 4K monitor,
+ * each simulation pixel is rendered as a clean, sharp, square block.
+ */
+.pixel-canvas {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+  width: 100%;
+  height: 100%;
+  object-fit: contain; /* Preserves 16:9 aspect ratio without distortion */
+  background-color: #08080c;
+}
