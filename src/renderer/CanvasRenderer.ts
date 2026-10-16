@@ -11,6 +11,10 @@
  *   millions of individual screen pixels.
  */
 
+import type { Camera } from './Camera';
+import type { Universe } from '../simulation/Universe';
+import type { CelestialBody } from '../entities/CelestialBody';
+
 export interface RendererOptions {
   /** Internal logical width in simulation pixels (default: 320) */
   width?: number;
@@ -110,5 +114,96 @@ export class CanvasRenderer {
 
     // Draw the bright center core
     this.drawPixel(px, py, coreColor);
+  }
+
+  /**
+   * Draws a filled rasterized pixel disk/circle on the low-resolution buffer.
+   * 
+   * @param x Center X coordinate
+   * @param y Center Y coordinate
+   * @param radius Radius in screen pixels
+   * @param color CSS color string
+   */
+  public drawCircle(x: number, y: number, radius: number, color: string): void {
+    const cx = Math.floor(x);
+    const cy = Math.floor(y);
+    const r = Math.round(radius);
+
+    if (r <= 0) {
+      this.drawPixel(cx, cy, color);
+      return;
+    }
+
+    const rSquared = r * r;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy <= rSquared) {
+          this.drawPixel(cx + dx, cy + dy, color);
+        }
+      }
+    }
+  }
+
+  /**
+   * Draws a 4-point star spike halo around a celestial body.
+   * 
+   * @param x Center X coordinate
+   * @param y Center Y coordinate
+   * @param offset Distance from center in screen pixels
+   * @param color Corona or halo color string
+   */
+  public drawCrossHalo(x: number, y: number, offset: number, color: string): void {
+    const px = Math.floor(x);
+    const py = Math.floor(y);
+    const d = Math.max(1, Math.round(offset));
+
+    this.drawPixel(px - d, py, color);
+    this.drawPixel(px + d, py, color);
+    this.drawPixel(px, py - d, color);
+    this.drawPixel(px, py + d, color);
+  }
+
+  /**
+   * Renders a single CelestialBody by projecting it through the Camera.
+   * 
+   * @param body The celestial body to draw
+   * @param camera The active Camera transforming world space to screen buffer
+   */
+  public renderBody(body: CelestialBody, camera: Camera): void {
+    const screenPos = camera.worldToScreen(body.position);
+    const screenRadius = Math.max(1, Math.round(body.radius * camera.zoom));
+
+    // 1. Draw outer halo / corona spikes if specified
+    if (body.haloColor) {
+      if (screenRadius <= 1) {
+        this.drawStarPoint(screenPos.x, screenPos.y, body.color, body.haloColor);
+        return;
+      }
+      this.drawCrossHalo(screenPos.x, screenPos.y, screenRadius + 1, body.haloColor);
+    }
+
+    // 2. Draw core physical disk
+    if (screenRadius <= 1) {
+      this.drawPixel(screenPos.x, screenPos.y, body.color);
+    } else {
+      this.drawCircle(screenPos.x, screenPos.y, screenRadius, body.color);
+    }
+  }
+
+  /**
+   * Renders the entire Universe through the Camera onto the canvas.
+   * Automatically executes viewport culling to prune invisible off-screen bodies.
+   * 
+   * @param universe The universe container holding active celestial bodies
+   * @param camera The active Camera managing viewport offset and zoom
+   */
+  public renderUniverse(universe: Universe, camera: Camera): void {
+    for (const body of universe.getBodies()) {
+      // Viewport Culling: Skip bodies that lie completely outside the screen
+      if (!camera.isVisible(body.position, body.radius, 3)) {
+        continue;
+      }
+      this.renderBody(body, camera);
+    }
   }
 }

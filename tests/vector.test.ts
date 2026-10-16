@@ -94,4 +94,12 @@ describe('Vector2 Operations', () => {
     expect(Number.isNaN(normalized.x)).toBe(false);
     expect(Number.isNaN(normalized.y)).toBe(false);
   });
+
+  it('should negate a vector by inverting the signs of components', () => {
+    const v = new Vector2(3, -7);
+    const negated = v.negate();
+
+    expect(negated.x).toBe(-3);
+    expect(negated.y).toBe(7);
+  });
 });

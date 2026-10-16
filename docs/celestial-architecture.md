@@ -54,7 +54,9 @@ BodyCategory
 | **Yellow Dwarf** | `STAR` | $1.0$ | Gold (`#fde047`) | Orange 1px cross | Stable host for planetary systems |
 | **Red Dwarf** | `STAR` | $0.2$ | Crimson (`#f87171`) | None (dim 1px) | Most abundant star; long-lived |
 | **Blue Giant** | `STAR` | $16.0$ | Cyan (`#67e8f9`) | Deep blue cross | Gravitational heavyweight; short life |
+| **Red Supergiant** | `STAR` | $18.0$ | Vermilion (`#ef4444`) | Dark red corona | Massive bloated star; pre-supernova |
 | **White Dwarf** | `STAR` | $0.8$ | Pure White (`#ffffff`) | None (bright point)| Compact, hot stellar remnant |
+| **Neutron Star** | `STAR` | $1.5$ | Blue-White (`#e0e7ff`) | Indigo pulsar halo | Ultra-dense remnant core |
 | **Supermassive Black Hole** | `BLACK_HOLE` | $500.0+$ | Black (`#000000`) | Violet accretion ring | Gravitational center of galaxies |
 | **Stellar Black Hole** | `BLACK_HOLE` | $25.0$ | Black (`#000000`) | Cyan/blue accretion | Severe local gravitational sink |
 | **Terrestrial Planet** | `PLANET` | $0.001$ | Slate Blue (`#94a3b8`) | None (1px) | Orbits stars; low gravitational pull |
@@ -112,6 +114,9 @@ flowchart TD
   - `createSun(position, velocity?)`
   - `createRedDwarf(position, velocity?)`
   - `createBlueGiant(position, velocity?)`
+  - `createRedSupergiant(position, velocity?)`
+  - `createWhiteDwarf(position, velocity?)`
+  - `createNeutronStar(position, velocity?)`
   - `createBlackHole(position, isSupermassive?)`
   - `createPlanet(position, isGasGiant?)`
   - `createAsteroid(position, velocity)`
@@ -159,12 +164,13 @@ flowchart TD
 - [x] **Step 0:** Project setup (Vite, TypeScript, Vitest).
 - [x] **Step 1:** CanvasRenderer & low-res pixel buffer.
 - [x] **Step 2:** `Vector2` mathematical class and automated test suite.
-- [ ] **Step 3:** Celestial types and enums (`src/entities/types.ts`).
-- [ ] **Step 4:** `CelestialBody` entity class (`src/entities/CelestialBody.ts`) + unit tests.
-- [ ] **Step 5:** `CelestialBodyFactory` (`src/factories/CelestialBodyFactory.ts`) + unit tests.
-- [ ] **Step 6:** `Camera` viewport & coordinate transformer (`src/renderer/Camera.ts`) + unit tests.
-- [ ] **Step 7:** `Universe` scene container (`src/simulation/Universe.ts`) + unit tests.
-- [ ] **Step 8:** Scene rendering pipeline in `CanvasRenderer` and `src/main.ts`.
-- [ ] **Step 9:** Gravitational physics engine (Leapfrog integrator, $F = G \frac{m_1 m_2}{r^2}$).
-- [ ] **Step 10:** `GalaxyFactory` (Milky Way preset with rotating disk).
+- [x] **Step 3:** Celestial types and enums (`src/entities/types.ts`).
+- [x] **Step 4:** `CelestialBody` entity class (`src/entities/CelestialBody.ts`) + unit tests.
+- [x] **Step 5:** `CelestialBodyFactory` (`src/factories/CelestialBodyFactory.ts`) + unit tests.
+- [x] **Step 6:** `Camera` viewport & coordinate transformer (`src/renderer/Camera.ts`) + unit tests.
+- [x] **Step 7:** `Universe` scene container (`src/simulation/Universe.ts`) + unit tests.
+- [x] **Step 8:** Scene rendering pipeline in `CanvasRenderer` and `src/main.ts`.
+- [x] **Step 9:** Newtonian gravitational physics ($F = G \frac{m_1 m_2}{r^2}$) and live simulation loop.
+- [ ] **Step 10:** Symplectic Leapfrog / Velocity Verlet integrator & Gravitational softening ($\epsilon$).
+- [ ] **Step 11:** `GalaxyFactory` (Milky Way preset with exponential disk and Keplerian orbital curve).
 

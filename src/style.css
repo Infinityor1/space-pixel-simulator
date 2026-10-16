@@ -233,4 +233,9 @@ html, body {
   height: 100%;
   object-fit: contain; /* Preserves 16:9 aspect ratio without distortion */
   background-color: #08080c;
+  cursor: grab;
+}
+
+.pixel-canvas:active {
+  cursor: grabbing;
 }

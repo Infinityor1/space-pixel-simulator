@@ -99,6 +99,14 @@ export class Vector2 {
   }
 
   /**
+   * Reverses the direction of this vector by inverting the sign of its components.
+   * Formula: (-x, -y)
+   */
+  public negate(): Vector2 {
+    return new Vector2(-this.x, -this.y);
+  }
+
+  /**
    * Normalizes the vector into a "unit vector" with length 1, preserving its direction.
    * Formula: (x / magnitude, y / magnitude)
    * 
