@@ -100,10 +100,28 @@ export class ParticleEmitter {
   /**
    * Advances particle lifetimes and spawns new trail embers from active bodies.
    * 
+   * EDUCATIONAL CONCEPT: "Zoom-Adaptive Particle Emission"
+   * -----------------------------------------------------
+   * When zooming in and out in a physics simulation, graphics elements can easily
+   * fall out of visual balance:
+   * 1. Screen-Space Clumping (The Zoom-Out Problem):
+   *    If particles emit at a fixed rate (e.g. 28/sec) and live for 1 second, zooming out
+   *    squeezes that entire 1-second trail into just 2 or 3 screen pixels. Hundreds of particles
+   *    overlap into a blazing, dense blob that drowns out the tiny 1-pixel celestial body.
+   * 2. Perceptual Clearance:
+   *    When a body shrinks on screen, it is clamped to a minimum of 1 pixel. If particles
+   *    were placed using fixed world units, they would spawn INSIDE that 1-pixel screen disk!
+   *    By converting the body's actual rendered screen radius back to world space, we guarantee
+   *    particles always spawn strictly outside the planet disk at any zoom factor.
+   * 3. Proportional Lifetimes & Rates:
+   *    Scaling emission intervals and lifetimes with `zoom` keeps the particle density on
+   *    screen constant, providing a graceful, balanced stardust trail across all magnifications.
+   * 
    * @param bodies List of celestial bodies emitting particles
    * @param dt Elapsed delta time in seconds
+   * @param zoom Current camera magnification factor (defaults to 1.0)
    */
-  public update(bodies: readonly CelestialBody[], dt: number): void {
+  public update(bodies: readonly CelestialBody[], dt: number, zoom: number = 1.0): void {
     // 1. Advance and prune existing particles
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
@@ -122,14 +140,21 @@ export class ParticleEmitter {
       p.position = p.position.add(p.velocity.scale(dt));
     }
 
-    // 2. Check if it's time to spawn a new batch of particles
+    // 2. Zoom-dependent emission rate scaling:
+    // When zoomed out (zoom < 1.0), increase interval (emit less frequently)
+    // to prevent dozens of particles from clumping into a tiny screen area.
+    const clampedZoom = Math.max(0.05, Math.min(5.0, zoom));
+    const intervalScaling = Math.pow(clampedZoom, 0.7);
+    const effectiveInterval = this.emissionInterval / intervalScaling;
+
     this.timer += dt;
-    if (this.timer < this.emissionInterval) {
+    if (this.timer < effectiveInterval) {
       return;
     }
     this.timer = 0;
 
-    // 3. Emit particles strictly outside each celestial body's perimeter
+    // 3. Emit particles strictly outside each celestial body's perimeter,
+    // taking into account the camera zoom and rendered screen radius.
     for (const body of bodies) {
       if (this.particles.length >= this.maxParticles) {
         break;
@@ -138,9 +163,17 @@ export class ParticleEmitter {
       const speed = body.velocity.magnitude();
       let angle: number;
 
-      // Surface clearance margin to guarantee no pixel overlap with the body disk
-      const clearance = 0.5 + Math.random() * 0.5;
-      const spawnDistance = body.radius + clearance;
+      // Calculate the rendered visual radius in world units at current zoom.
+      // Since screenRadius = Math.max(1, Math.round(body.radius * zoom^0.8)),
+      // the visual radius in world units is screenRadius / zoom.
+      const zoomScale = Math.pow(clampedZoom, 0.8);
+      const screenRadius = Math.max(1, Math.round(body.radius * zoomScale));
+      const visualRadiusWorld = screenRadius / clampedZoom;
+
+      // Clearance in world units: guaranteed at least 1.0 screen pixel outside the body disk
+      const clearancePixels = 1.0 + Math.random() * 0.8;
+      const clearanceWorld = clearancePixels / clampedZoom;
+      const spawnDistance = visualRadiusWorld + clearanceWorld;
 
       if (speed < 0.1) {
         // Stationary body (e.g. Sun): Radiate outward in all 360 degrees
@@ -162,8 +195,8 @@ export class ParticleEmitter {
       const spawnOffset = new Vector2(dirX * spawnDistance, dirY * spawnDistance);
       const spawnPosition = body.position.add(spawnOffset);
 
-      // Radial outward puff velocity (always directs particles away from body center)
-      const puffSpeed = 1.0 + Math.random() * 2.0;
+      // Radial outward puff velocity (scaled so particles visibly drift away in screen space)
+      const puffSpeed = (1.0 + Math.random() * 2.0) / Math.sqrt(clampedZoom);
       const outwardPuff = new Vector2(dirX * puffSpeed, dirY * puffSpeed);
 
       // Trailing inertia: particles inherit slight backward drift relative to body motion
@@ -172,7 +205,10 @@ export class ParticleEmitter {
 
       const color = body.haloColor ?? body.color;
       const fadeColor = this.getFadeColor(color);
-      const lifetime = 0.5 + Math.random() * 0.5; // Lives between 0.5s and 1.0s
+
+      // Scale lifetime with zoom so trails don't stretch across the entire zoomed-out system
+      const lifeScale = Math.min(1.0, Math.max(0.35, Math.pow(clampedZoom, 0.6)));
+      const lifetime = (0.5 + Math.random() * 0.5) * lifeScale;
 
       this.particles.push({
         position: spawnPosition,
@@ -187,11 +223,15 @@ export class ParticleEmitter {
 
   /**
    * Renders active particles onto the canvas buffer through the camera.
+   * When zoomed in significantly (zoom >= 3.0), draws slightly larger 2x2 embers
+   * so particles remain visible relative to enlarged celestial bodies.
    * 
    * @param renderer The target CanvasRenderer
    * @param camera The active Camera transforming world space to screen buffer
    */
   public render(renderer: CanvasRenderer, camera: Camera): void {
+    const drawSize = camera.zoom >= 3.0 ? 2 : 1;
+
     for (const p of this.particles) {
       // Viewport Culling: Skip particles off-screen
       if (!camera.isVisible(p.position, 0, 1)) {
@@ -202,7 +242,11 @@ export class ParticleEmitter {
       // Color aging: shift to dimmer fadeColor when particle has less than 35% life remaining
       const color = (p.life / p.maxLife > 0.35) ? p.coreColor : p.fadeColor;
 
-      renderer.drawPixel(Math.floor(screenPos.x), Math.floor(screenPos.y), color);
+      if (drawSize > 1) {
+        renderer.drawCircle(screenPos.x, screenPos.y, 1, color);
+      } else {
+        renderer.drawPixel(Math.floor(screenPos.x), Math.floor(screenPos.y), color);
+      }
     }
   }
 

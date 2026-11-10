@@ -166,12 +166,29 @@ export class CanvasRenderer {
   /**
    * Renders a single CelestialBody by projecting it through the Camera.
    * 
+   * EDUCATIONAL CONCEPT: "Perceptual Zoom Scaling & Screen-Space Clamping"
+   * ----------------------------------------------------------------------
+   * In a retro 2D pixel space simulation, drawing celestial bodies under camera zoom
+   * presents a classic graphics dilemma:
+   * 1. Pure Linear Scaling (r * zoom):
+   *    When zooming out (e.g. zoom = 0.25x), realistic planetary radii (1 to 2 world units)
+   *    shrink to fractional pixels (0.25 to 0.5px). Clamping with Math.max(1, ...)
+   *    causes every single star and planet to immediately collapse into identical
+   *    1-pixel dots, losing all sense of scale and hierarchy!
+   * 2. Sub-Linear Zoom Scaling (r * zoom^0.8):
+   *    By raising zoom to a power slightly less than 1.0 (0.8), celestial bodies
+   *    shrink smoothly when zooming out without instantly flattening into 1-pixel specks,
+   *    and enlarge elegantly when zooming in without ballooning uncontrollably.
+   * 
    * @param body The celestial body to draw
    * @param camera The active Camera transforming world space to screen buffer
    */
   public renderBody(body: CelestialBody, camera: Camera): void {
     const screenPos = camera.worldToScreen(body.position);
-    const screenRadius = Math.max(1, Math.round(body.radius * camera.zoom));
+
+    // Apply sub-linear zoom scaling so bodies remain distinct and visible across zoom levels
+    const zoomScale = Math.pow(camera.zoom, 0.8);
+    const screenRadius = Math.max(1, Math.round(body.radius * zoomScale));
 
     // 1. Draw outer halo / corona spikes if specified
     if (body.haloColor) {
@@ -179,7 +196,9 @@ export class CanvasRenderer {
         this.drawStarPoint(screenPos.x, screenPos.y, body.color, body.haloColor);
         return;
       }
-      this.drawCrossHalo(screenPos.x, screenPos.y, screenRadius + 1, body.haloColor);
+      // Offset halo cross dynamically based on the rendered screen disk radius
+      const haloOffset = Math.max(2, screenRadius + 1);
+      this.drawCrossHalo(screenPos.x, screenPos.y, haloOffset, body.haloColor);
     }
 
     // 2. Draw core physical disk

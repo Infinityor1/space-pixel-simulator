@@ -128,4 +128,59 @@ describe('ParticleEmitter Trail & Aura System', () => {
     emitter.clear();
     expect(emitter.particles.length).toBe(0);
   });
+
+  it('should scale spawn clearance to prevent screen overlap when zoomed out', () => {
+    const emitter = new ParticleEmitter({ emissionInterval: 0.01 });
+    const planet = CelestialBodyFactory.createPlanet(new Vector2(0, 0), false); // radius = 1.0
+
+    // Zoomed out to 0.25x: on screen, planet is clamped to at least 1 screen pixel
+    // 1 screen pixel at zoom 0.25 is 4 world units!
+    const zoom = 0.25;
+    emitter.update([planet], 0.05, zoom);
+
+    expect(emitter.particles.length).toBeGreaterThan(0);
+    for (const p of emitter.particles) {
+      const distWorld = p.position.distanceTo(planet.position);
+      // Spawn distance in world units must exceed visualRadiusWorld (screenRadius / zoom = 1 / 0.25 = 4)
+      expect(distWorld).toBeGreaterThan(4.0);
+      // In screen coordinates, distance must be strictly greater than 1 screen pixel
+      const distScreen = distWorld * zoom;
+      expect(distScreen).toBeGreaterThan(1.0);
+    }
+  });
+
+  it('should scale particle lifetime down when zoomed out to prevent trail crowding', () => {
+    const emitterZoomOut = new ParticleEmitter({ emissionInterval: 0.01 });
+    const emitterNormal = new ParticleEmitter({ emissionInterval: 0.01 });
+    const planet = CelestialBodyFactory.createPlanet(new Vector2(0, 0), false);
+
+    emitterZoomOut.update([planet], 0.05, 0.25);
+    emitterNormal.update([planet], 0.05, 1.0);
+
+    expect(emitterZoomOut.particles.length).toBeGreaterThan(0);
+    expect(emitterNormal.particles.length).toBeGreaterThan(0);
+
+    // Zoomed-out particle lifetime should be scaled down compared to standard 1.0 zoom
+    const zoomOutLife = emitterZoomOut.particles[0].maxLife;
+    const normalLife = emitterNormal.particles[0].maxLife;
+    expect(zoomOutLife).toBeLessThan(normalLife);
+  });
+
+  it('should render larger embers when zoomed in close (zoom >= 3.0)', () => {
+    const emitter = new ParticleEmitter({ emissionInterval: 0.01 });
+    const sun = CelestialBodyFactory.createSun(new Vector2(0, 0));
+
+    emitter.update([sun], 0.02, 3.5);
+
+    const camera = new Camera({ viewportWidth: 320, viewportHeight: 180, zoom: 3.5 });
+    const mockRenderer = {
+      drawCircle: vi.fn(),
+      drawPixel: vi.fn(),
+    } as unknown as CanvasRenderer;
+
+    emitter.render(mockRenderer, camera);
+
+    // At zoom >= 3.0, drawCircle should be called for particle embers
+    expect(mockRenderer.drawCircle).toHaveBeenCalled();
+  });
 });

@@ -122,11 +122,38 @@ flowchart TD
   - `createAsteroid(position, velocity)`
   - `createComet(position, velocity)`
 
+### Layer 1: Domain Entities & Astrodynamics Math (`src/entities/`, `src/physics/`)
+- **`Vector2` (`src/physics/Vector2.ts`)**: 2D coordinate, velocity, and distance calculations with `magnitudeSquared()` optimizations.
+- **`CelestialBody` (`src/entities/CelestialBody.ts`)**: Single atomic data container storing mass, position, velocity, and visual rendering metadata. Free of rendering logic.
+- **`OrbitMath` (`src/physics/OrbitMath.ts`)**:
+  - **Perifocal Conic Coordinate System ($P, Q$):** Generates exact orbital positions and velocities from orbital elements ($a, e, \omega, \nu$):
+    $$\vec{r} = \frac{p}{1 + e \cos \nu} (\cos \nu \hat{P} + \sin \nu \hat{Q}), \quad \vec{v} = \sqrt{\frac{\mu}{p}} [-\sin \nu \hat{P} + (e + \cos \nu) \hat{Q}]$$
+    Powers realistic eccentric comets ($0.7 < e < 0.95$) and grazing hyperbolic galaxy collisions ($e \ge 1.0$).
+  - **Sphere of Influence (SOI) & Moon Shepherding:**
+    $$r_{\text{SOI}} \approx r \left(\frac{m_{\text{planet}}}{M_{\text{star}}}\right)^{2/5}$$
+    Guarantees moonlets spawned near gas giants stay gravitationally bound rather than stripped by solar tides.
+  - **Solar Radiation Pressure Vector:**
+    Directs comet particle tails radially outward from the host star along $\hat{u} = \frac{\vec{r}_{\text{comet}} - \vec{r}_{\text{star}}}{|\vec{r}_{\text{comet}} - \vec{r}_{\text{star}}|}$.
+
+### Layer 2: Atomic Creational Layer (`src/factories/CelestialBodyFactory.ts`)
+- **Pattern:** Factory Pattern (GoF).
+- **Responsibility:** Encapsulates the specific parameters (mass, colors, radius) required to construct individual bodies:
+  - `createSun(position, velocity?)`
+  - `createRedDwarf(position, velocity?)`
+  - `createBlueGiant(position, velocity?)`
+  - `createRedSupergiant(position, velocity?)`
+  - `createWhiteDwarf(position, velocity?)`
+  - `createNeutronStar(position, velocity?)`
+  - `createBlackHole(position, isSupermassive?)`
+  - `createPlanet(position, isGasGiant?)`
+  - `createAsteroid(position, velocity)`
+  - `createComet(position, velocity)`
+
 ### Layer 3: Intermediary Scene & Viewport Layer
 - **`Universe` (`src/simulation/Universe.ts`):**
-  - Manages the collection of `CelestialBody` instances.
-  - Zero DOM dependencies; 100% unit-testable in Node/Vitest.
-  - Exposes addition, removal, clearing, and iteration capabilities.
+  - Manages the collection of `CelestialBody` instances. Zero DOM dependencies; 100% unit-testable in Node/Vitest.
+  - **Conservation Invariants Diagnostics:** Computes total mechanical energy $E = T + V$ and total angular momentum $H_z = \sum m_i (x_i v_{y,i} - y_i v_{x,i})$.
+  - **Barycentric Centering:** Provides center of mass $\vec{R}_{\text{cm}} = \frac{\sum m_i \vec{r}_i}{\sum m_i}$ and momentum cancellation to prevent galaxy drift.
 - **`Camera` (`src/renderer/Camera.ts`):**
   - Encapsulates camera position $(X_{\text{cam}}, Y_{\text{cam}})$, zoom factor, and screen dimensions.
   - Mathematical transformation:
@@ -134,28 +161,32 @@ flowchart TD
     $$Y_{\text{screen}} = (Y_{\text{world}} - Y_{\text{cam}}) \cdot \text{zoom} + \frac{\text{height}}{2}$$
   - **Viewport Culling:** Filters out bodies positioned beyond the visible buffer boundaries, preventing wasted draw calls.
 
-### Layer 4: Macro Systems Layer (`src/factories/GalaxyFactory.ts`)
+### Layer 4: Macro Systems Layer (`src/factories/GalaxyFactory.ts`, `src/scenarios/`)
 - **Pattern:** Layered Factory / Preset Generator (Single Responsibility Principle).
 - **Responsibility:** Constructs macro-systems of hundreds or thousands of bodies:
-  - Calculates exponential galactic disk distributions.
-  - Computes tangential Keplerian orbital velocity ($v = \sqrt{\frac{GM}{r}}$) so disk stars orbit stably without flying apart.
-  - Populates a `Universe` instance with presets: `createMilkyWay()`, `createSolarSystem()`, `createGalaxyCollision()`.
+  - **Enclosed Mass & Dark Matter Halo Rotation Curve:**
+    $$v_{\text{tangent}}(r) = \sqrt{\frac{G \cdot [M_{\text{SMBH}} + M_{\text{disk}}(<r) + M_{\text{halo}}(<r)]}{r + \epsilon}}$$
+    Reproduces authentic flat galactic rotation curves without disk collapse.
+  - **Barycentric Momentum Cancellation:** Zeroes net system velocity $\vec{v}_{\text{cm}} = \frac{\sum m_i \vec{v}_i}{\sum m_i}$ so the galaxy remains stationary at $(0, 0)$.
+  - **Preset Scenarios (`src/scenarios/`):** Provides educational presets for Keplerian orbits, the 4 velocity fates, and binary star systems.
 
 ### Layer 5: Renderer (`src/renderer/CanvasRenderer.ts`)
-- Projects visible bodies onto the $320 \times 180$ low-res buffer using integer pixel drawing, halo routines, and nearest-neighbor scaling.
+- Projects visible bodies onto the $320 \times 180$ low-res buffer using sub-linear zoom scaling ($r \cdot \text{zoom}^{0.8}$), integer pixel drawing, halo routines, and nearest-neighbor scaling.
 
 ---
 
 ## 4. Academic Justification for the FYP Report
 
-1. **Single Responsibility Principle (SRP):**
-   - Entities hold physical state, the `Universe` manages collection lifecycle, the `Camera` performs coordinate geometry, and the `CanvasRenderer` issues pixel draw calls.
+1. **Single Responsibility Principle (SRP) & Decoupled Architecture:**
+   - Entities hold physical state, `Universe` manages collection lifecycle, `Camera` performs coordinate geometry, and `CanvasRenderer` issues pixel draw calls. Enables headless unit testing in Vitest without browser mocks.
 2. **Open/Closed Principle (OCP):**
-   - Adding a new celestial type (e.g., `PULSAR` or `DARK_MATTER`) requires adding an enum entry and a factory method, without modifying physics, camera projection, or rendering algorithms.
-3. **Decoupled Architecture & Testability:**
-   - The domain model (`CelestialBody`, `Universe`, physics) runs headless without HTML canvas dependencies, enabling comprehensive automated unit testing in Vitest.
-4. **Performance & Viewport Culling:**
-   - Off-screen bodies are pruned at the camera transformation stage before reaching the canvas rasterizer.
+   - Adding a new celestial type requires adding an enum entry and a factory method, without modifying physics, camera projection, or rendering algorithms.
+3. **Astrodynamic Rigor & Symplectic Conservation:**
+   - Replacing standard Euler with a Symplectic Leapfrog (Velocity Verlet) integrator mathematically preserves geometric phase space, keeping energy drift $|\Delta E / E_0| < 10^{-4}$ across 10,000+ simulation steps.
+4. **Physical Justification of Dark Matter:**
+   - Using Newton's Shell Theorem with an enclosed mass profile $M(<r)$ demonstrates why galaxies require dark matter halos to prevent outer stellar disk dispersion.
+5. **Performance & Viewport Culling:**
+   - Off-screen bodies are pruned at the camera transformation stage before reaching the canvas rasterizer, scaling to thousands of bodies.
 
 ---
 
@@ -171,6 +202,11 @@ flowchart TD
 - [x] **Step 7:** `Universe` scene container (`src/simulation/Universe.ts`) + unit tests.
 - [x] **Step 8:** Scene rendering pipeline in `CanvasRenderer` and `src/main.ts`.
 - [x] **Step 9:** Newtonian gravitational physics ($F = G \frac{m_1 m_2}{r^2}$) and live simulation loop.
-- [ ] **Step 10:** Symplectic Leapfrog / Velocity Verlet integrator & Gravitational softening ($\epsilon$).
-- [ ] **Step 11:** `GalaxyFactory` (Milky Way preset with exponential disk and Keplerian orbital curve).
+- [x] **Step 9.5:** Preset Simulation Scenarios & Examples tab (Keplerian, 4 Velocity Regimes, Binary Stars).
+- [ ] **Step 9.6:** Interactive Drag-and-Drop Body Palette with Auto-Orbit velocity assist.
+- [ ] **Step 10:** Plummer Gravitational Softening ($\epsilon$), Symplectic Leapfrog (Velocity Verlet) Integrator, and Energy Conservation Diagnostics ($E, H_z$).
+- [ ] **Step 11:** Perifocal Conic Spawner (`OrbitMath.ts`) & Sphere of Influence (SOI) moonlet shepherding.
+- [ ] **Step 12:** `GalaxyFactory` (Milky Way with exponential disk, Enclosed Mass $M(<r)$, Dark Matter Halo flat rotation curve, and Barycentric zeroing).
+- [ ] **Step 13:** Inelastic Collision & Accretion Mergers ($M_{\text{new}} = m_1 + m_2$, $\vec{v}_{\text{new}} = \frac{m_1 \vec{v}_1 + m_2 \vec{v}_2}{m_1 + m_2}$) and Solar Wind Comet Tails.
+- [ ] **Step 14:** Barnes-Hut $\mathcal{O}(N \log N)$ Quadtree optimization for scaling to 1,000+ stars.
 

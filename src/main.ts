@@ -21,9 +21,14 @@ import { Vector2 } from './physics/Vector2';
 import { Camera } from './renderer/Camera';
 import { CanvasRenderer } from './renderer/CanvasRenderer';
 import { Universe } from './simulation/Universe';
-import { CelestialBodyFactory } from './factories/CelestialBodyFactory';
 import { Starfield } from './renderer/Starfield';
 import { ParticleEmitter } from './renderer/ParticleEmitter';
+import {
+  ALL_SCENARIOS,
+  keplerianSystemScenario,
+  SCENARIO_G,
+} from './scenarios/presetScenarios';
+import type { Scenario } from './scenarios/types';
 
 // 1. Locate root container in index.html
 const appElement = document.querySelector<HTMLDivElement>('#app');
@@ -38,6 +43,18 @@ appElement.innerHTML = `
     <div id="hud" style="margin-top: 6px; font-family: ui-monospace, monospace; font-size: 0.8rem; color: #9ca3af;">
       Initializing gravitational field...
     </div>
+
+    <!-- Interactive Examples & Scenarios Selection Bar -->
+    <div style="margin-top: 8px; display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap;">
+      <span style="font-size: 0.8rem; font-weight: 600; color: #cbd5e1;">Examples:</span>
+      <div id="scenario-tabs" style="display: inline-flex; gap: 6px; background: #111827; padding: 3px; border-radius: 6px; border: 1px solid #374151; flex-wrap: wrap;">
+        <!-- Injected dynamically from ALL_SCENARIOS -->
+      </div>
+    </div>
+    <div id="scenario-desc" style="margin-top: 5px; font-size: 0.75rem; color: #94a3b8; font-style: italic; min-height: 1.2rem;">
+      Loading scenario description...
+    </div>
+
     <div style="margin-top: 8px; display: flex; gap: 6px; justify-content: center; align-items: center; flex-wrap: wrap;">
       <button id="btn-play-pause" style="background: #2563eb; color: #ffffff; border: 1px solid #3b82f6; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-weight: 500;">Pause ⏸</button>
       <button id="btn-gravity" style="background: #059669; color: #ffffff; border: 1px solid #10b981; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-weight: 500;">Gravity: ON</button>
@@ -100,59 +117,59 @@ const particleEmitter = new ParticleEmitter({
 });
 
 // ---------------------------------------------------------------------------
-// 7. Gravitational Physics Setup
+// 7. Universe & Scenario Management
 // ---------------------------------------------------------------------------
-// Gravitational constant scaled for smooth visual orbits at 320x180 resolution
-const SIMULATION_G = 50.0;
-
 const universe = new Universe({
   gravityEnabled: true,
-  G: SIMULATION_G,
+  G: SCENARIO_G,
 });
 
-// Central Star: Fixed anchor with substantial mass (100 Solar Masses)
-const SUN_MASS = 100.0;
-const sol = CelestialBodyFactory.createSun(
-  new Vector2(0, 0),
-  new Vector2(0, 0),
-  'Sol (Yellow Dwarf)'
-);
-sol.mass = SUN_MASS;
-sol.fixed = true; // Fixed anchor at center (0, 0)
+let currentScenario: Scenario = keplerianSystemScenario;
 
-// Helper: Calculate Keplerian circular orbital speed: v = sqrt(G * M / r)
-function calculateOrbitalSpeed(distance: number): number {
-  return Math.sqrt((SIMULATION_G * SUN_MASS) / distance);
+// Switches simulation scenarios dynamically without browser reloads
+function loadScenario(scenario: Scenario): void {
+  currentScenario = scenario;
+  // Clear lingering particles and camera follow lock when switching systems
+  particleEmitter.clear();
+  starfield.resetOffset();
+  camera.unfollow();
+  scenario.setup(universe, camera);
+
+  // Update button active states
+  document.querySelectorAll<HTMLButtonElement>('.scenario-tab-btn').forEach((btn) => {
+    const isCurrent = btn.dataset.scenarioId === scenario.id;
+    btn.classList.toggle('active', isCurrent);
+  });
+
+  // Update description header
+  const descEl = document.querySelector<HTMLDivElement>('#scenario-desc');
+  if (descEl) {
+    descEl.textContent = scenario.description;
+  }
+
+  updateHUD();
 }
 
-// Body 2: Rocky Planet (Terra) at distance r = 55 units
-// Tangential velocity points along +Y to enter counter-clockwise circular orbit
-const terraDistance = 55.0;
-const terraSpeed = calculateOrbitalSpeed(terraDistance); // ~9.53 units/sec
-const terra = CelestialBodyFactory.createPlanet(
-  new Vector2(terraDistance, 0),
-  false, // Terrestrial
-  new Vector2(0, terraSpeed),
-  'Terra (Terrestrial)'
-);
-
-// Body 3: Gas Giant (Jovian) at distance r = 100 units
-// Tangential velocity points along -Y for counter-clockwise orbit
-const jovianDistance = 100.0;
-const jovianSpeed = calculateOrbitalSpeed(jovianDistance); // ~7.07 units/sec
-const jovian = CelestialBodyFactory.createPlanet(
-  new Vector2(-jovianDistance, 0),
-  true, // Gas Giant
-  new Vector2(0, -jovianSpeed),
-  'Jovian (Gas Giant)'
-);
-
-// Register bodies in the universe
-universe.addBodies([sol, terra, jovian]);
+// Build Scenario Navigation Tabs
+const scenarioTabsContainer = document.querySelector<HTMLDivElement>('#scenario-tabs');
+if (scenarioTabsContainer) {
+  for (const scenario of ALL_SCENARIOS) {
+    const tabBtn = document.createElement('button');
+    tabBtn.className = `scenario-tab-btn ${scenario.id === currentScenario.id ? 'active' : ''}`;
+    tabBtn.dataset.scenarioId = scenario.id;
+    tabBtn.textContent = scenario.name;
+    tabBtn.title = scenario.description;
+    tabBtn.addEventListener('click', () => {
+      loadScenario(scenario);
+    });
+    scenarioTabsContainer.appendChild(tabBtn);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // 6. HUD and Render Pipeline
 // ---------------------------------------------------------------------------
+
 let isRunning = true;
 let currentEffectiveDt = 0;
 
@@ -164,6 +181,7 @@ function updateHUD(): void {
 
   hudDiv.innerHTML = `
     <span>Status: <strong>${isRunning ? 'Active 🟢' : 'Paused ⏸'}</strong></span> | 
+    <span>Bodies: <strong>${universe.bodyCount}</strong></span> | 
     <span>Tracking: <strong>${targetLabel}</strong></span> | 
     <span>Stars on Follow: <strong>${starsLabel}</strong></span> | 
     <span>Speed: <strong>${universe.timeScale.toFixed(2)}x (Δt ≈ ${effectiveMs}ms)</strong></span> | 
@@ -171,6 +189,10 @@ function updateHUD(): void {
     <span>Zoom: <strong>${camera.zoom.toFixed(2)}x</strong></span>
   `;
 }
+
+// Seed initial default scenario (safe to call after updateHUD & state variables are defined)
+loadScenario(keplerianSystemScenario);
+
 
 function render(): void {
   // 1. Clear buffer with deep space black
@@ -207,8 +229,8 @@ function simulationLoop(currentTimestamp: number): void {
   // Update camera position if tracking an active body
   camera.update();
 
-  // Update stardust particles and trails
-  particleEmitter.update(universe.getBodies(), isRunning ? rawDt * universe.timeScale : 0);
+  // Update stardust particles and trails with active camera zoom scaling
+  particleEmitter.update(universe.getBodies(), isRunning ? rawDt * universe.timeScale : 0, camera.zoom);
 
   render();
   requestAnimationFrame(simulationLoop);
@@ -257,7 +279,7 @@ btnGravity.addEventListener('click', () => {
     btnGravity.style.background = '#dc2626';
     btnGravity.style.borderColor = '#ef4444';
   } else {
-    universe.enableGravity(SIMULATION_G);
+    universe.enableGravity(SCENARIO_G);
     btnGravity.textContent = 'Gravity: ON';
     btnGravity.style.background = '#059669';
     btnGravity.style.borderColor = '#10b981';
